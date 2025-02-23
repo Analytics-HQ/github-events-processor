@@ -16,13 +16,21 @@ public class GithubEventsProcessor {
     private static final String INPUT_TOPIC = "kfk-t-github-sink";
     private static final String OUTPUT_TOPIC = "kfk-t-github-events";
     private static final String BOOTSTRAP_SERVERS = "kfk-github-kafka-bootstrap.env-g0vgp2.svc.dev.ahq:9092";
-    private static final String KAFKA_USERNAME = "kfk-u-github-ccravens";
-    private static final String KAFKA_PASSWORD = "vRDFslHaRImo1Xz8WqkOeQa8qmHtXP79";
+    // private static final String KAFKA_USERNAME = "kfk-u-github-ccravens";
+    // private static final String KAFKA_PASSWORD = "vRDFslHaRImo1Xz8WqkOeQa8qmHtXP79";
+    
+    private static final String KAFKA_USERNAME = System.getenv("KAFKA_USERNAME");
+    private static final String KAFKA_PASSWORD = System.getenv("KAFKA_PASSWORD");
 
     private static final ObjectMapper objectMapper = new ObjectMapper()
-            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false); // ✅ Ignore extra fields
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     public static void main(String[] args) {
+        if (KAFKA_USERNAME == null || KAFKA_PASSWORD == null) {
+            System.err.println("❌ Environment variables KAFKA_USERNAME and KAFKA_PASSWORD must be set.");
+            System.exit(1);
+        }
+        
         Properties consumerProps = new Properties();
         consumerProps.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, BOOTSTRAP_SERVERS);
         consumerProps.put(ConsumerConfig.GROUP_ID_CONFIG, "github-events-processor");
