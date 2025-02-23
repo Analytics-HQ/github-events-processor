@@ -152,3 +152,9 @@ spec:
 ```
 trino://admin@tno-github.env-g0vgp2.svc.dev.ahq:8080/nse-github/default?auth=JWT&password=kWLMFYt6yp1hBWE3vdsXYzXujCgYiovLdWWHZd0xugPXbsM34up2dCR3xntKgcsdWzOCPRDEO3h0ibmAM7J6udC4VrJo93oSagMrZ1vIIpBH2gPEZDjKzJBUYwyF5zYy
 ```
+
+## Build and Run
+```
+mvn clean package
+KAFKA_BOOTSTRAP_SERVER='kfk-github-kafka-bootstrap.env-g0vgp2.svc.dev.ahq:9092' KAFKA_INPUT_TOPIC='kfk-t-github-sink' KAFKA_OUTPUT_TOPIC='kfk-t-github-events' KAFKA_USERNAME='kfk-u-github-ccravens' KAFKA_PASSWORD='vRDFslHaRImo1Xz8WqkOeQa8qmHtXP79' java -jar target/github-events-processor-1.0-SNAPSHOT.jar
+```
