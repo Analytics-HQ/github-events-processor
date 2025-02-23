@@ -17,9 +17,9 @@ from kafka.errors import KafkaError
 
 # Configure logging
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)]
+    handlers=[logging.StreamHandler(sys.stderr)]
 )
 
 # Constants
@@ -27,14 +27,14 @@ SSE_URL = "http://github-firehose.libraries.io/events"
 KAFKA_BOOTSTRAP_SERVERS = "kfk-github-kafka-bootstrap.env-g0vgp2.svc.dev.ahq:9092"
 KAFKA_TOPIC = "kfk-t-github-sink"
 KAFKA_USERNAME = "kfk-u-github-ccravens"
-KAFKA_PASSWORD = "pF9Jq16H5JrhrDUNyCLUk3OZjDZJVvFf"
+KAFKA_PASSWORD = "vRDFslHaRImo1Xz8WqkOeQa8qmHtXP79"
 
 BATCH_SIZE = 100  # Adjust batch size as needed
 
 def fetch_github_events():
     """Fetches GitHub SSE events and sends them in batches to Kafka."""
-    logging.info("🔄 Initializing Kafka Producer...")
-    
+    total_published = 0  # Track the number of published messages
+
     try:
         producer = KafkaProducer(
             bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
@@ -44,71 +44,71 @@ def fetch_github_events():
             sasl_plain_password=KAFKA_PASSWORD,
             value_serializer=lambda v: json.dumps(v).encode("utf-8"),
         )
-        logging.info("✅ Kafka Producer initialized successfully.")
     except KafkaError as e:
         logging.error(f"❌ Kafka Producer initialization failed: {e}")
-        sys.exit(1)
-
-    event_batch = []
+        return "Kafka Producer Error"  # Return instead of sys.exit(1)
 
     try:
-        logging.info(f"🔄 Connecting to GitHub Firehose SSE at {SSE_URL}...")
+        logging.info("🔄 Connecting to GitHub Firehose SSE...")
         response = requests.get(SSE_URL, stream=True, timeout=300, headers={"Accept": "text/event-stream"})
 
-        logging.info(f"🔍 Received HTTP Status Code: {response.status_code}")
         if response.status_code != 200:
-            logging.error(f"❌ Connection failed with status {response.status_code}")
-            sys.exit(1)
+            logging.error(f"❌ Connection failed with status {response.status_code}. Exiting gracefully.")
+            return None  # No retry, exit cleanly
 
-        logging.info("📡 SSE Connection Established. Listening for events...")
         client = sseclient.SSEClient(response)
-
-        event_count = 0
-        batch_count = 0
+        event_batch = []
 
         for event in client.events():
             try:
                 if event.data:
-                    event_batch.append(json.loads(event.data))
-                    event_count += 1
+                    json_event = json.loads(event.data)
+                    event_batch.append(json_event)
 
                     if len(event_batch) >= BATCH_SIZE:
-                        logging.info(f"🚀 Sending batch {batch_count + 1} to Kafka ({len(event_batch)} events)...")
-                        
                         for record in event_batch:
                             try:
-                                future = producer.send(KAFKA_TOPIC, record)
-                                future.add_callback(lambda metadata: logging.info(f"✅ Message sent to {metadata.topic} partition {metadata.partition}"))
-                                future.add_errback(lambda exc: logging.error(f"❌ Message failed to send: {exc}"))
+                                producer.send(KAFKA_TOPIC, value=record)
                             except KafkaError as ke:
                                 logging.error(f"❌ Kafka send error: {ke}")
 
                         producer.flush()
-                        logging.info(f"✅ Published {len(event_batch)} events to Kafka (Batch {batch_count + 1}).")
-                        batch_count += 1
-                        event_batch = []  # Clear batch
+                        total_published += len(event_batch)
+                        logging.info(f"✅ Published {len(event_batch)} messages (Total: {total_published})")
 
-                    if event_count % 10 == 0:
-                        logging.debug(f"📊 Processed {event_count} events so far...")
+                        event_batch = []  # Clear batch
 
             except json.JSONDecodeError as e:
                 logging.warning(f"⚠️ JSON Decode Error: {e}")
 
     except requests.exceptions.ChunkedEncodingError:
-        logging.warning("⚠️ SSE Connection closed normally (Chunked Encoding Error). Exiting gracefully.")
-        sys.exit(0)
+        logging.warning("⚠️ SSE Connection closed by the server. Exiting gracefully.")
+        return None  # Do not mark as an error
+
+    except requests.exceptions.ConnectionError:
+        logging.warning("⚠️ SSE Connection lost (ConnectionError). Exiting gracefully.")
+        return None
+
+    except requests.exceptions.Timeout:
+        logging.warning("⚠️ SSE Connection timed out. Exiting gracefully.")
+        return None
 
     except requests.exceptions.RequestException as e:
-        logging.error(f"❌ SSE Connection failed: {e}")
-        sys.exit(1)
+        logging.error(f"❌ SSE Connection failed: {e}. Exiting gracefully.")
+        return None  # Do not mark as an error
 
     except Exception as e:
-        logging.error(f"⚠️ Unexpected error: {e}")
-        sys.exit(1)
+        logging.error(f"⚠️ Unexpected error: {e}. Exiting gracefully.")
+        return None  # Do not mark as an error
+
+    finally:
+        logging.info("🛑 Exiting gracefully...")
+        producer.close()
+
+    return None  # Execution successful
 
 if __name__ == "__main__":
     fetch_github_events()
-
 ```
 
 ## Kafka User Spec
@@ -146,4 +146,9 @@ spec:
           type: topic
         operations:
           - Write
+```
+
+## Sample Trino URL for Superset
+```
+trino://admin@tno-github.env-g0vgp2.svc.dev.ahq:8080/nse-github/default?auth=JWT&password=kWLMFYt6yp1hBWE3vdsXYzXujCgYiovLdWWHZd0xugPXbsM34up2dCR3xntKgcsdWzOCPRDEO3h0ibmAM7J6udC4VrJo93oSagMrZ1vIIpBH2gPEZDjKzJBUYwyF5zYy
 ```

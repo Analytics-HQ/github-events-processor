@@ -1,6 +1,7 @@
 package com.analyticshq;
 
 import com.analyticshq.models.GithubEvent;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.producer.*;
@@ -16,9 +17,10 @@ public class GithubEventsProcessor {
     private static final String OUTPUT_TOPIC = "kfk-t-github-events";
     private static final String BOOTSTRAP_SERVERS = "kfk-github-kafka-bootstrap.env-g0vgp2.svc.dev.ahq:9092";
     private static final String KAFKA_USERNAME = "kfk-u-github-ccravens";
-    private static final String KAFKA_PASSWORD = "pF9Jq16H5JrhrDUNyCLUk3OZjDZJVvFf";
+    private static final String KAFKA_PASSWORD = "vRDFslHaRImo1Xz8WqkOeQa8qmHtXP79";
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final ObjectMapper objectMapper = new ObjectMapper()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false); // ✅ Ignore extra fields
 
     public static void main(String[] args) {
         Properties consumerProps = new Properties();
@@ -61,15 +63,11 @@ public class GithubEventsProcessor {
             ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));
             for (ConsumerRecord<String, String> record : records) {
                 try {
-                    // Parse the full event JSON
+                    // ✅ Parse the full event JSON
                     GithubEvent event = objectMapper.readValue(record.value(), GithubEvent.class);
 
-                    // Serialize only the top-level attributes
-                    String simplifiedEventJson = objectMapper.writeValueAsString(event);
-                    System.out.println("📥 Processed Event: " + simplifiedEventJson);
-
-                    // Publish to the output topic
-                    producer.send(new ProducerRecord<>(OUTPUT_TOPIC, simplifiedEventJson),
+                    // ✅ Publish to the output topic
+                    producer.send(new ProducerRecord<>(OUTPUT_TOPIC, objectMapper.writeValueAsString(event)),
                             (metadata, exception) -> {
                                 if (exception != null) {
                                     System.err.println("❌ Failed to publish event: " + exception.getMessage());
