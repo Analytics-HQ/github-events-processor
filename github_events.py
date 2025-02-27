@@ -1,12 +1,3 @@
-## requirements.txt
-```
-sseclient-py==1.8.0
-requests==2.32.3
-kafka-python==2.0.3
-```
-
-## github_events.py
-```python
 import sseclient
 import requests
 import json
@@ -27,7 +18,7 @@ SSE_URL = "http://github-firehose.libraries.io/events"
 KAFKA_BOOTSTRAP_SERVERS = "kfk-github-kafka-bootstrap.env-g0vgp2.svc.dev.ahq:9092"
 KAFKA_TOPIC = "kfk-t-github-sink"
 KAFKA_USERNAME = "kfk-u-github-ccravens"
-KAFKA_PASSWORD = "vRDFslHaRImo1Xz8WqkOeQa8qmHtXP79"
+KAFKA_PASSWORD = "GkugKjwtoTwYFC2OYAbmLjkbLw3oWMuT"
 
 BATCH_SIZE = 100  # Adjust batch size as needed
 
@@ -109,52 +100,3 @@ def fetch_github_events():
 
 if __name__ == "__main__":
     fetch_github_events()
-```
-
-## Kafka User Spec
-```yaml
-spec:
-  authentication:
-    password:
-      valueFrom:
-        secretKeyRef:
-          key: password
-          name: kfk-u-github-ccravens
-    type: scram-sha-512
-  authorization:
-    type: simple
-    acls:
-      - resource:
-          name: github-events-processor
-          patternType: literal
-          type: group
-        operations:
-          - Read
-          - Describe
-      - resource:
-          name: kfk-t-github-sink
-          patternType: literal
-          type: topic
-        operations:
-          # - Create
-          # - Describe
-          - Read
-          - Write
-      - resource:
-          name: kfk-t-github-events
-          patternType: literal
-          type: topic
-        operations:
-          - Write
-```
-
-## Sample Trino URL for Superset
-```
-trino://admin@tno-github.env-g0vgp2.svc.dev.ahq:8080/nse-github/default?auth=JWT&password=sXX4eHEHzDUJ7aOwPUtwfAjG3y7YPhHjMoAloGACzFZiFd2z2phmtEqBmhbwWR8bk1lurZdlbROo5CLpzIrm4HAUXkavX8dOLOgB5kOoopnmchoVaNSRmKVXqVeGiR1I
-```
-
-## Build and Run
-```
-mvn clean package
-KAFKA_BOOTSTRAP_SERVER='kfk-github-kafka-bootstrap.env-g0vgp2.svc.dev.ahq:9092' KAFKA_INPUT_TOPIC='kfk-t-github-sink' KAFKA_OUTPUT_TOPIC='kfk-t-github-events' KAFKA_USERNAME='kfk-u-github-ccravens' KAFKA_PASSWORD='GkugKjwtoTwYFC2OYAbmLjkbLw3oWMuT' java -jar target/github-events-processor-1.0-SNAPSHOT.jar
-```
