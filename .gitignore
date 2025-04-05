@@ -1,1 +1,3 @@
 target/
+
+schema_validator/__pycache__/

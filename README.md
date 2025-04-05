@@ -1,8 +1,14 @@
 ## requirements.txt
 ```
-sseclient-py==1.8.0
 requests==2.32.3
-kafka-python==2.0.3
+sseclient-py==1.8.0
+kafka-python==2.1.5
+fastavro==1.10.0
+structlog==25.2.0
+microsoft-kiota-abstractions==1.9.3
+microsoft-kiota-http==1.9.3
+apicurioregistryclient==0.6.2
+apicurioregistrysdk==3.0.6
 ```
 
 ## github_events.py
@@ -150,11 +156,49 @@ spec:
 
 ## Sample Trino URL for Superset
 ```
-trino://admin@tno-github.env-g0vgp2.svc.dev.ahq:8080/nse-github/default?auth=JWT&password=sXX4eHEHzDUJ7aOwPUtwfAjG3y7YPhHjMoAloGACzFZiFd2z2phmtEqBmhbwWR8bk1lurZdlbROo5CLpzIrm4HAUXkavX8dOLOgB5kOoopnmchoVaNSRmKVXqVeGiR1I
+trino://admin@tno-github.env-45y9fr.svc.dev.ahq:8080/nse-github/default?auth=JWT&password=CyYFo3bpseYr4BiCbDZ3jDOlO4bYOocuis09bdhBYS0TrTf7nOxiiMeBgtLJC3CFU9Ax2UFa6pfeYM4sx6GInM8JepK3vovHVcTddocxmbbWJgbhacpmWxEgQNk9rO0L
 ```
 
 ## Build and Run
 ```
 mvn clean package
 KAFKA_BOOTSTRAP_SERVER='kfk-github-kafka-bootstrap.env-g0vgp2.svc.dev.ahq:9092' KAFKA_INPUT_TOPIC='kfk-t-github-sink' KAFKA_OUTPUT_TOPIC='kfk-t-github-events' KAFKA_USERNAME='kfk-u-github-ccravens' KAFKA_PASSWORD='GkugKjwtoTwYFC2OYAbmLjkbLw3oWMuT' java -jar target/github-events-processor-1.0-SNAPSHOT.jar
+```
+
+```
+{
+  "type": "record",
+  "name": "Event",
+  "namespace": "com.analyticshq.github",
+  "fields": [
+    {
+      "name": "id",
+      "type": "string"
+    },
+    {
+      "name": "type",
+      "type": "string"
+    },
+    {
+      "name": "created_at",
+      "type": "string"
+    },
+    {
+      "name": "public",
+      "type": "boolean"
+    },
+    {
+      "name": "actor_name",
+      "type": "string"
+    },
+    {
+      "name": "repo_name",
+      "type": "string"
+    },
+    {
+      "name": "ts",
+      "type": "string"
+    }
+  ]
+}
 ```
