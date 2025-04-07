@@ -1,0 +1,18 @@
+## Apicurio Dependencies
+requests==2.32.3
+sseclient-py==1.8.0
+
+## Apicurio Dependencies
+apicurioregistryclient==0.6.2
+apicurioregistrysdk==3.0.6
+microsoft-kiota-abstractions==1.9.3
+microsoft-kiota-http==1.9.3
+fastavro==1.10.0
+
+## Kafka Dependencies
+kafka-python==2.1.5
+
+## Automated Validation Dependencies
+great_expectations==1.3.13
+soda_core==3.5.2
+pandas==2.2.3

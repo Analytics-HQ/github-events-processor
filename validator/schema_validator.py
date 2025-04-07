@@ -1,21 +1,25 @@
 import asyncio
 import json
 import requests
-import fastavro
-from fastavro import schemaless_writer, parse_schema
-from avro.io import BinaryEncoder, DatumWriter
+import struct
+import logging
+import binascii
 
 from io import BytesIO
-from typing import Dict, Any, Callable
+from typing import Dict, Any, Callable, List
+
 from kiota_abstractions.authentication.access_token_provider import AccessTokenProvider
 from kiota_abstractions.authentication.base_bearer_token_authentication_provider import (
     BaseBearerTokenAuthenticationProvider,
 )
 from kiota_http.httpx_request_adapter import HttpxRequestAdapter
 from apicurioregistrysdk.client.registry_client import RegistryClient
-import struct
-import logging
-import binascii
+
+import fastavro
+from fastavro import schemaless_writer, parse_schema
+from avro.io import BinaryEncoder, DatumWriter
+
+from jsonschema import validate as jsonschema_validate, ValidationError as JSONValidationError
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,13 +39,16 @@ class KeycloakAccessTokenProvider(AccessTokenProvider):
     def get_authorization_token(self, *scopes) -> str:
         if self.access_token:
             return self.access_token
-        payload = {
+            
+        response = requests.post(self.keycloak_url, data={
             "grant_type": self.grant_type,
             "client_id": self.client_id,
             "client_secret": self.client_secret
+        }, headers={
+            "Content-Type": 
+            "application/x-www-form-urlencoded"
         }
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-        response = requests.post(self.keycloak_url, data=payload, headers=headers)
+        )
         response.raise_for_status()
         self.access_token = response.json()["access_token"]
         return self.access_token
@@ -67,6 +74,20 @@ class SchemaValidator:
             "Authorization": f"Bearer {access_token}",
             "Accept": "application/json"
         }
+
+    def _get_cached_schema(self, group: str, artifact_id: str, version: str):
+        """Returns the parsed Avro schema and globalId for the given group/artifact/version."""
+        cache_key = f"{group}:{artifact_id}:{version}"
+
+        if cache_key not in self.parsed_schema_cache:
+            raw_schema = self.load_schema(group, artifact_id, version)
+            parsed_schema = fastavro.parse_schema(raw_schema)
+            self.parsed_schema_cache[cache_key] = parsed_schema
+        else:
+            parsed_schema = self.parsed_schema_cache[cache_key]
+
+        global_id = self.get_global_id(group, artifact_id, version)
+        return parsed_schema, global_id
 
     def load_schema(self, group: str, artifact_id: str, version: str) -> Dict[str, Any]:
         cache_key = f"{group}:{artifact_id}:{version}"
@@ -94,21 +115,7 @@ class SchemaValidator:
         logging.info(f"🌍 Retrieved globalId {global_id} for {artifact_id} v{version}")
         return global_id
 
-    def _get_cached_schema(self, group: str, artifact_id: str, version: str):
-        """Returns the parsed Avro schema and globalId for the given group/artifact/version."""
-        cache_key = f"{group}:{artifact_id}:{version}"
-
-        if cache_key not in self.parsed_schema_cache:
-            raw_schema = self.load_schema(group, artifact_id, version)
-            parsed_schema = fastavro.parse_schema(raw_schema)
-            self.parsed_schema_cache[cache_key] = parsed_schema
-        else:
-            parsed_schema = self.parsed_schema_cache[cache_key]
-
-        global_id = self.get_global_id(group, artifact_id, version)
-        return parsed_schema, global_id
-
-    def encode_avro_with_magic(self, group_id, artifact_id, version, payload):
+    def encode_avro(self, group_id, artifact_id, version, payload):
         parsed_schema, global_id = self._get_cached_schema(group_id, artifact_id, version)
 
         out = BytesIO()
@@ -129,4 +136,22 @@ class SchemaValidator:
             return True
         except Exception as e:
             logging.error(f"❌ Invalid Avro record: {json.dumps(event)}\nReason: {e}")
+            return False
+
+    def encode_json_schema(self, group_id, artifact_id, version, payload: Dict[str, Any]) -> bytes:
+        schema = self.load_schema(group_id, artifact_id, version)
+        global_id = self.get_global_id(group_id, artifact_id, version)
+
+        json_bytes = json.dumps(payload).encode("utf-8")
+        message = MAGIC_BYTE + struct.pack(">I", global_id) + json_bytes
+
+        logging.info(f"🔎 JSON encoded bytes preview: {binascii.hexlify(message[:10])}")
+        return message
+
+    def validate_json_schema(self, schema: Dict[str, Any], payload: Dict[str, Any]) -> bool:
+        try:
+            jsonschema_validate(instance=payload, schema=schema)
+            return True
+        except JSONValidationError as e:
+            logging.error(f"❌ Invalid JSON record: {json.dumps(payload)}\nReason: {e.message}")
             return False

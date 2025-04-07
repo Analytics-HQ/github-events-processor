@@ -1,58 +1,89 @@
+import os
 import json
 import requests
 import sseclient
 import logging
+import pandas as pd
+
 from kafka import KafkaProducer
 from kafka.errors import KafkaError
-from schema_validator.validator import SchemaValidator
+from validator.schema_validator import SchemaValidator
+from validator.data_validator import DataValidator
 
 # === Constants ===
 SSE_URL = "http://github-firehose.libraries.io/events"
 
 # Kafka Config
 KAFKA_BOOTSTRAP_SERVERS = "kfk-github-kafka-bootstrap.env-45y9fr.svc.dev.ahq:9092"
-KAFKA_TOPIC = "kfk-t-github-events"
 KAFKA_USERNAME = "kfk-u-github-ccravens"
 KAFKA_PASSWORD = "pSfP5SXY1WO1MWX2kgkIFi0lLNgOM1l5"
+
+KAFKA_EVENTS_TOPIC = "kfk-t-github-events"
+KAFKA_NOTIFICATIONS_TOPIC = "kfk-t-github-notifications"
 
 # Registry & Auth Config
 REGISTRY_URL = "http://acr-apicurio-registry-api.env-45y9fr.svc.dev.ahq:8080/apis/registry/v3"
 KEYCLOAK_URL = "https://idp.dev.analyticshq.com/realms/env-45y9fr/protocol/openid-connect/token"
 CLIENT_ID = "acr-apicurio-registry-api"
 CLIENT_SECRET = "LPyybQKduIjv6XTww1m8KNlYrL9RlOVP"
-SCHEMA_GROUP = "com.analyticshq.github"
-SCHEMA_ID = "events"
-SCHEMA_VERSION = "1.0.0"
 
-# Batch size
+GITHUB_EVENTS_SCHEMA_GROUP = "com.analyticshq.github"
+GITHUB_EVENTS_SCHEMA_ID = "event"
+GITHUB_EVENTS_SCHEMA_VERSION = "1.0.0"
+
+USER_MESSAGE_SCHEMA_GROUP = "com.analyticshq.message"
+USER_MESSAGE_SCHEMA_ID = "user"
+USER_MESSAGE_SCHEMA_VERSION = "1.0.0"
+
+DATA_VALIDATION_RULES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data_validation_rules.json")
+
 BATCH_SIZE = 100
 
-# Logging config
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
 
 def fetch_github_events():
-    # Initialize Schema Validator
-    validator = SchemaValidator(REGISTRY_URL, KEYCLOAK_URL, CLIENT_ID, CLIENT_SECRET)
+    schema_validator = SchemaValidator(REGISTRY_URL, KEYCLOAK_URL, CLIENT_ID, CLIENT_SECRET)
+    
+    data_validator = DataValidator()
+    data_validator.load_rules_from_file(DATA_VALIDATION_RULES_PATH)
 
-    # Initialize Kafka Producer
     try:
-        producer = KafkaProducer(
+        producer_avro = KafkaProducer(
             bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
             security_protocol="SASL_PLAINTEXT",
             sasl_mechanism="SCRAM-SHA-512",
             sasl_plain_username=KAFKA_USERNAME,
             sasl_plain_password=KAFKA_PASSWORD,
-            value_serializer=lambda v: validator.encode_avro_with_magic(SCHEMA_GROUP, SCHEMA_ID, SCHEMA_VERSION, v),
+            value_serializer=lambda v: schema_validator.encode_avro(
+                GITHUB_EVENTS_SCHEMA_GROUP,
+                GITHUB_EVENTS_SCHEMA_ID,
+                GITHUB_EVENTS_SCHEMA_VERSION,
+                v
+            ),
         )
-        logging.info("✅ Kafka producer initialized.")
+
+        producer_json = KafkaProducer(
+            bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+            security_protocol="SASL_PLAINTEXT",
+            sasl_mechanism="SCRAM-SHA-512",
+            sasl_plain_username=KAFKA_USERNAME,
+            sasl_plain_password=KAFKA_PASSWORD,
+            value_serializer=lambda v: schema_validator.encode_json_schema(
+                USER_MESSAGE_SCHEMA_GROUP,
+                USER_MESSAGE_SCHEMA_ID,
+                USER_MESSAGE_SCHEMA_VERSION,
+                v
+            ),
+        )
+
+        logging.info("✅ Kafka producers initialized.")
     except KafkaError as e:
         logging.error(f"❌ Kafka initialization failed: {e}")
         return
 
-    # Connect to GitHub SSE
     logging.info("🔄 Connecting to GitHub Firehose SSE...")
     response = requests.get(SSE_URL, stream=True, timeout=300, headers={"Accept": "text/event-stream"})
 
@@ -61,11 +92,12 @@ def fetch_github_events():
         return
 
     client = sseclient.SSEClient(response)
+    schema_avro = schema_validator.load_schema(GITHUB_EVENTS_SCHEMA_GROUP, GITHUB_EVENTS_SCHEMA_ID, GITHUB_EVENTS_SCHEMA_VERSION)
+    schema_json = schema_validator.load_schema(USER_MESSAGE_SCHEMA_GROUP, USER_MESSAGE_SCHEMA_ID, USER_MESSAGE_SCHEMA_VERSION)
+
     event_batch = []
-    total_published = 0
 
     try:
-        schema = validator.load_schema(SCHEMA_GROUP, SCHEMA_ID, SCHEMA_VERSION)
         for event in client.events():
             if not event.data:
                 continue
@@ -83,30 +115,48 @@ def fetch_github_events():
                     "ts": json_event.get("created_at"),
                 }
 
-                if validator.validate_avro(schema, validated_event):
-                    logging.info(f"✅ Validated: {validated_event}")
-                    event_batch.append(validated_event)
+                if not schema_validator.validate_avro(schema_avro, validated_event):
+                    continue
 
-                    if len(event_batch) >= BATCH_SIZE:
-                        for record in event_batch:
-                            try:
-                                future = producer.send(KAFKA_TOPIC, value=record)
-                                future.add_callback(lambda r: logging.info(f"✅ Sent to Kafka: {record['id']}"))
-                                future.add_errback(lambda e: logging.error(f"❌ Kafka send error: {e}"))
-                                # pass
-                            except Exception as send_error:
-                                logging.error(f"❌ Failed to serialize/send: {send_error}")
+                event_batch.append(validated_event)
 
-                        producer.flush()
-                        total_published += len(event_batch)
-                        logging.info(f"📦 {len(event_batch)} events sent (Total validated: {total_published})")
-                        event_batch = []
+                if len(event_batch) >= BATCH_SIZE:
+                    data_validator.add_data(event_batch)
+
+                    if not data_validator.validate():
+                        notification = {
+                            "title": "GitHub Events Validation Failed",
+                            "message": "Great Expectations checks failed. Data dropped."
+                        }
+
+                        if schema_validator.validate_json_schema(schema_json, notification):
+                            producer_json.send(KAFKA_NOTIFICATIONS_TOPIC, value=notification)
+                            producer_json.flush()
+                            logging.warning("⚠️ GE validation failed. Sent notification.")
+                        else:
+                            logging.error("❌ Notification failed JSON schema validation.")
+
+                        event_batch.clear()
+                        continue
+
+                    # All checks passed, send to Kafka
+                    for record in event_batch:
+                        try:
+                            producer_avro.send(KAFKA_EVENTS_TOPIC, value=record)
+                        except Exception as send_error:
+                            logging.error(f"❌ Kafka send failed: {send_error}")
+
+                    producer_avro.flush()
+                    logging.info(f"📦 Sent {len(event_batch)} GitHub events to Kafka.")
+                    event_batch.clear()
 
             except json.JSONDecodeError as e:
                 logging.warning(f"⚠️ JSON decode error: {e}")
+
     finally:
-        logging.info("🛑 Exiting and closing producer...")
-        producer.close()
+        logging.info("🛑 Shutting down.")
+        producer_avro.close()
+        producer_json.close()
 
 if __name__ == "__main__":
     fetch_github_events()
