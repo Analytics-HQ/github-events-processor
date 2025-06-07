@@ -128,8 +128,6 @@ class SchemaValidator:
             raise
 
         message = MAGIC_BYTE + struct.pack(">I", global_id) + out.getvalue()
-
-        logging.info(f"🧪 Avro encoded preview: {binascii.hexlify(message[:20])}")
         return message
 
     def validate_avro(self, schema: Dict[str, Any], event: Dict[str, Any]) -> bool:

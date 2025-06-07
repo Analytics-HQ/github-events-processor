@@ -167,11 +167,11 @@ spec:
 
 ## Sample Trino URL for Superset
 ```
-trino://admin@tno-github.env-1czw4v.svc.dev.ahq:8080/nse-github/default?auth=JWT&password=LOF2cZ6A5HwOKMzHupoMoJOnsiRsQRgWAlOY7XUvPboR1Y9tRqI2fK2rOsYHSIN6TE9975d85tnq3IdcJdVFHuGoMiCqUDvATc04xYfvQbUOtj2H1PSZvicuZWTCKQNc
+trino://admin@tno-github.env-bcizkp.svc.dev.ahq:8080/nse-github/default?auth=JWT&password=oCXRvUDlmR7PWpwzIA2RHbskjTmToBeXtKX7CnZYwqjVuv532eIzRIiMzcRvBGc58g6nGnknawFcRxMaGG43iBp3CaxYu93dJMwYvUzWDqwa72sT51jvXSKzlwHNcChW
 ```
 
 ## Build and Run
 ```
 mvn clean package
-KAFKA_BOOTSTRAP_SERVER='kfk-github-kafka-bootstrap.env-1czw4v.svc.dev.ahq:9092' KAFKA_INPUT_TOPIC='kfk-t-github-sink' KAFKA_OUTPUT_TOPIC='kfk-t-github-events' KAFKA_USERNAME='kfk-u-github-ccravens' KAFKA_PASSWORD='GkugKjwtoTwYFC2OYAbmLjkbLw3oWMuT' java -jar target/github-events-processor-1.0-SNAPSHOT.jar
+KAFKA_BOOTSTRAP_SERVER='kfk-github-kafka-bootstrap.env-bcizkp.svc.dev.ahq:9092' KAFKA_INPUT_TOPIC='kfk-t-github-sink' KAFKA_OUTPUT_TOPIC='kfk-t-github-events' KAFKA_USERNAME='kfk-u-github-ccravens' KAFKA_PASSWORD='GkugKjwtoTwYFC2OYAbmLjkbLw3oWMuT' java -jar target/github-events-processor-1.0-SNAPSHOT.jar
 ```

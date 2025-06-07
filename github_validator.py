@@ -11,18 +11,18 @@ from validator.schema_validator import SchemaValidator
 SSE_URL = "http://github-firehose.libraries.io/events"
 
 # Kafka Config
-KAFKA_BOOTSTRAP_SERVERS = "kfk-github-kafka-bootstrap.env-1czw4v.svc.army.kubezt:9092"
+KAFKA_BOOTSTRAP_SERVERS = "kfk-github-kafka-bootstrap.env-bcizkp.svc.army.kubezt:9092"
 KAFKA_USERNAME = "kfk-u-github-ccravens"
-KAFKA_PASSWORD = "shnWk1OwMhRfCTMoZgyRDfJYANVZo2LJ"
+KAFKA_PASSWORD = "YZlyyngqdk1SQF4pQuTmmh8v5VFP9pAH"
 
 KAFKA_EVENTS_TOPIC = "kfk-t-github-events"
 KAFKA_USERS_TOPIC = "kfk-t-github-users"
 
 # Registry & Auth Config
-REGISTRY_URL = "http://acr-apicurio-registry-api.env-1czw4v.svc.army.kubezt:8080/apis/registry/v3"
-KEYCLOAK_URL = "https://idp.army.kubezt.com/realms/env-1czw4v/protocol/openid-connect/token"
+REGISTRY_URL = "http://acr-apicurio-registry-api.env-bcizkp.svc.army.kubezt:8080/apis/registry/v3"
+KEYCLOAK_URL = "https://idp.army.kubezt.com/realms/env-bcizkp/protocol/openid-connect/token"
 CLIENT_ID = "acr-apicurio-registry-api"
-CLIENT_SECRET = "qB3hpuRQnIMEkybMh3g042qQnQ65Ntjn"
+CLIENT_SECRET = "tIINNmuAvWrBQa6fuPHUqcEzkgFeTe1S"
 
 GITHUB_EVENTS_SCHEMA_GROUP = "com.analyticshq.github"
 GITHUB_EVENTS_SCHEMA_ID = "event"
@@ -122,7 +122,6 @@ def fetch_github_events():
                     "avatar_url": actor.get("avatar_url"),
                 }
 
-                # Send user record once
                 if actor_id and actor_id not in seen_user_ids:
                     if schema_validator.validate_avro(schema_user_avro, validated_user):
                         producer_users.send(KAFKA_USERS_TOPIC, value=validated_user)
@@ -131,7 +130,6 @@ def fetch_github_events():
                     else:
                         logging.warning(f"⚠️ Invalid user schema: {validated_user}")
 
-                # Queue event for batch send
                 if schema_validator.validate_avro(schema_event_avro, validated_event):
                     event_batch.append(validated_event)
                 else:
@@ -151,6 +149,13 @@ def fetch_github_events():
 
             except json.JSONDecodeError as e:
                 logging.warning(f"⚠️ JSON decode error: {e}")
+
+    except requests.exceptions.ChunkedEncodingError:
+        logging.info("✅ Finished pulling GitHub events (SSE connection closed normally).")
+
+    except Exception as e:
+        logging.error(f"❌ Unexpected error: {e}")
+
     finally:
         logging.info("🛑 Shutting down.")
         producer_events.close()
