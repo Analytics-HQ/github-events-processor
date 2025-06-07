@@ -76,7 +76,6 @@ class SchemaValidator:
         }
 
     def _get_cached_schema(self, group: str, artifact_id: str, version: str):
-        """Returns the parsed Avro schema and globalId for the given group/artifact/version."""
         cache_key = f"{group}:{artifact_id}:{version}"
 
         if cache_key not in self.parsed_schema_cache:
@@ -118,24 +117,29 @@ class SchemaValidator:
     def encode_avro(self, group_id, artifact_id, version, payload):
         parsed_schema, global_id = self._get_cached_schema(group_id, artifact_id, version)
 
+        logging.debug(f"📘 Avro schema used: {json.dumps(parsed_schema)}")
+        logging.debug(f"📤 Payload before encoding: {json.dumps(payload)}")
+
         out = BytesIO()
-        schemaless_writer(out, parsed_schema, payload)
+        try:
+            schemaless_writer(out, parsed_schema, payload)
+        except Exception as e:
+            logging.error(f"❌ Avro schemaless_writer error: {e}")
+            raise
 
         message = MAGIC_BYTE + struct.pack(">I", global_id) + out.getvalue()
 
-        logging.info(f"🔎 Encoded bytes preview: {binascii.hexlify(message[:10])}")
-        logging.info(f"🧪 Magic byte: {message[0]} | globalId (hex): {message[1:5].hex()} | payload preview (hex): {message[5:10].hex()}")
-
+        logging.info(f"🧪 Avro encoded preview: {binascii.hexlify(message[:20])}")
         return message
 
     def validate_avro(self, schema: Dict[str, Any], event: Dict[str, Any]) -> bool:
         try:
             parsed_schema = fastavro.parse_schema(schema)
             buf = BytesIO()
-            schemaless_writer(buf, parsed_schema, event)  # ✅ Removed [event]
+            schemaless_writer(buf, parsed_schema, event)
             return True
         except Exception as e:
-            logging.error(f"❌ Invalid Avro record: {json.dumps(event)}\nReason: {e}")
+            logging.error(f"❌ Invalid Avro record:\n{json.dumps(event, indent=2)}\nSchema:\n{json.dumps(schema, indent=2)}\nReason: {e}")
             return False
 
     def encode_json_schema(self, group_id, artifact_id, version, payload: Dict[str, Any]) -> bytes:
@@ -145,7 +149,7 @@ class SchemaValidator:
         json_bytes = json.dumps(payload).encode("utf-8")
         message = MAGIC_BYTE + struct.pack(">I", global_id) + json_bytes
 
-        logging.info(f"🔎 JSON encoded bytes preview: {binascii.hexlify(message[:10])}")
+        logging.debug(f"🔎 JSON encoded bytes preview: {binascii.hexlify(message[:20])}")
         return message
 
     def validate_json_schema(self, schema: Dict[str, Any], payload: Dict[str, Any]) -> bool:

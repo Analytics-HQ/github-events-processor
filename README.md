@@ -38,6 +38,48 @@
 }
 ```
 
+```
+{
+  "type": "record",
+  "name": "User",
+  "namespace": "com.analyticshq.github",
+  "fields": [
+    {
+      "name": "id",
+      "type": "long"
+    },
+    {
+      "name": "login",
+      "type": "string"
+    },
+    {
+      "name": "display_login",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "gravatar_id",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "url",
+      "type": "string"
+    },
+    {
+      "name": "avatar_url",
+      "type": "string"
+    }
+  ]
+}
+```
+
 ## Data Validation
 `data_validation_rules.json`
 ```
@@ -61,14 +103,25 @@
 
 ## requirements.txt
 ```
+## Apicurio Dependencies
 requests==2.32.3
 sseclient-py==1.8.0
-kafka-python==2.1.5
-fastavro==1.10.0
-microsoft-kiota-abstractions==1.9.3
-microsoft-kiota-http==1.9.3
+
+## Apicurio Dependencies
 apicurioregistryclient==0.6.2
 apicurioregistrysdk==3.0.6
+microsoft-kiota-abstractions==1.9.3
+microsoft-kiota-http==1.9.3
+fastavro==1.10.0
+avro==1.12.0
+
+## Kafka Dependencies
+kafka-python==2.1.5
+
+## Automated Validation Dependencies
+great_expectations==1.3.13
+soda_core==3.5.2
+pandas==2.1.4
 ```
 
 ## Kafka User Spec
@@ -92,15 +145,6 @@ spec:
           - Read
           - Describe
       - resource:
-          name: kfk-t-github-sink
-          patternType: literal
-          type: topic
-        operations:
-          # - Create
-          # - Describe
-          - Read
-          - Write
-      - resource:
           name: kfk-t-github-events
           patternType: literal
           type: topic
@@ -110,11 +154,11 @@ spec:
 
 ## Sample Trino URL for Superset
 ```
-trino://admin@tno-github.env-45y9fr.svc.dev.ahq:8080/nse-github/default?auth=JWT&password=CyYFo3bpseYr4BiCbDZ3jDOlO4bYOocuis09bdhBYS0TrTf7nOxiiMeBgtLJC3CFU9Ax2UFa6pfeYM4sx6GInM8JepK3vovHVcTddocxmbbWJgbhacpmWxEgQNk9rO0L
+trino://admin@tno-github.env-1czw4v.svc.dev.ahq:8080/nse-github/default?auth=JWT&password=gsqQrEP9CBdb3vlPbqohTkUsWQUC9DpAnYEWf1AfUZlWThV4fwth9IXRIftO2CYsOaMj6N6LxXH6bv2AQA2sPzws5cFstMAKIyHAIy2MEEXSjTm90RCikXqScZGTbjW7
 ```
 
 ## Build and Run
 ```
 mvn clean package
-KAFKA_BOOTSTRAP_SERVER='kfk-github-kafka-bootstrap.env-g0vgp2.svc.dev.ahq:9092' KAFKA_INPUT_TOPIC='kfk-t-github-sink' KAFKA_OUTPUT_TOPIC='kfk-t-github-events' KAFKA_USERNAME='kfk-u-github-ccravens' KAFKA_PASSWORD='GkugKjwtoTwYFC2OYAbmLjkbLw3oWMuT' java -jar target/github-events-processor-1.0-SNAPSHOT.jar
+KAFKA_BOOTSTRAP_SERVER='kfk-github-kafka-bootstrap.env-1czw4v.svc.dev.ahq:9092' KAFKA_INPUT_TOPIC='kfk-t-github-sink' KAFKA_OUTPUT_TOPIC='kfk-t-github-events' KAFKA_USERNAME='kfk-u-github-ccravens' KAFKA_PASSWORD='GkugKjwtoTwYFC2OYAbmLjkbLw3oWMuT' java -jar target/github-events-processor-1.0-SNAPSHOT.jar
 ```
