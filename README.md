@@ -46,7 +46,7 @@
   "fields": [
     {
       "name": "id",
-      "type": "long"
+      "type": "string"
     },
     {
       "name": "login",
@@ -137,24 +137,37 @@ spec:
   authorization:
     type: simple
     acls:
-      - resource:
+      - operations:
+          - Read
+          - Describe
+        resource:
           name: github-events-processor
           patternType: literal
           type: group
-        operations:
+      - operations:
           - Read
           - Describe
-      - resource:
+        resource:
+          name: github-users-processor
+          patternType: literal
+          type: group
+      - operations:
+          - Write
+        resource:
           name: kfk-t-github-events
           patternType: literal
           type: topic
-        operations:
+      - operations:
           - Write
+        resource:
+          name: kfk-t-github-users
+          patternType: literal
+          type: topic
 ```
 
 ## Sample Trino URL for Superset
 ```
-trino://admin@tno-github.env-1czw4v.svc.dev.ahq:8080/nse-github/default?auth=JWT&password=gsqQrEP9CBdb3vlPbqohTkUsWQUC9DpAnYEWf1AfUZlWThV4fwth9IXRIftO2CYsOaMj6N6LxXH6bv2AQA2sPzws5cFstMAKIyHAIy2MEEXSjTm90RCikXqScZGTbjW7
+trino://admin@tno-github.env-1czw4v.svc.dev.ahq:8080/nse-github/default?auth=JWT&password=LOF2cZ6A5HwOKMzHupoMoJOnsiRsQRgWAlOY7XUvPboR1Y9tRqI2fK2rOsYHSIN6TE9975d85tnq3IdcJdVFHuGoMiCqUDvATc04xYfvQbUOtj2H1PSZvicuZWTCKQNc
 ```
 
 ## Build and Run
