@@ -3,9 +3,11 @@ import json
 import requests
 import sseclient
 import logging
+import pandas as pd
 from kafka import KafkaProducer
 from kafka.errors import KafkaError
 from validator.schema_validator import SchemaValidator
+from validator.data_validator import DataValidator, DataSourceType
 
 # === Constants ===
 SSE_URL = "http://github-firehose.libraries.io/events"
@@ -41,6 +43,17 @@ logging.basicConfig(
 
 def fetch_github_events():
     schema_validator = SchemaValidator(REGISTRY_URL, KEYCLOAK_URL, CLIENT_ID, CLIENT_SECRET)
+
+    # Initialize Great Expectations validator
+    gx_validator = DataValidator(project_root_dir=".")
+    gx_validator.add_datasource(
+        type=DataSourceType.PANDAS,
+        name="github_events",
+        execution_engine={},
+        data_connectors={}
+    )
+    gx_validator.add_dataframe_asset("github_events_batch", pd.DataFrame())
+    gx_validator.add_batch_definition("github_events_batch_def")
 
     try:
         producer_events = KafkaProducer(
@@ -100,6 +113,13 @@ def fetch_github_events():
 
             try:
                 json_event = json.loads(event.data)
+
+                # Validate raw JSON using Great Expectations
+                validation_result = gx_validator.validate(pd.DataFrame([json_event]))
+                if not validation_result["success"]:
+                    logging.warning("⚠️ GE validation failed for event. Skipping.")
+                    continue
+
                 actor = json_event.get("actor", {})
                 actor_id = actor.get("id")
 
